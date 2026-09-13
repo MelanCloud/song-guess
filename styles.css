@@ -14,6 +14,10 @@
 
 * { box-sizing: border-box; }
 
+/* Author styles outrank the UA's [hidden] rule, so any class below that sets
+   `display` would otherwise keep a hidden element on screen. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: radial-gradient(1100px 620px at 50% -12%, #17222c 0%, var(--bg) 62%);
