@@ -51,7 +51,7 @@ side and no secret involved (the app uses OAuth PKCE).
 
 ### 3. Playing with other people
 
-A new Spotify app starts in **development mode**, which allows up to **25
+A new Spotify app starts in **development mode**, which allows up to **5
 users**. Every other player must:
 
 1. have their own Spotify **Premium** account, and
@@ -100,8 +100,8 @@ for newly created apps. That was how games like Heardle played clips without
 Premium. The only remaining way to play a full track in a browser is the
 **Web Playback SDK**, which refuses to play audio on a free account.
 
-If you sign in with a free account the app tells you so on the spot rather than
-failing silently at the first snippet.
+A free account is rejected with an explanation when the player starts, rather
+than failing silently at the first snippet.
 
 ### Spotify's own playlists return 404
 
@@ -111,6 +111,21 @@ Daily Mix and anything else where the owner is Spotify. These return `404`.
 
 Use a playlist created by a person. The app detects this case and explains it
 instead of showing a bare 404.
+
+### Only playlists you own or collaborate on
+
+Spotify's [February 2026 migration](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)
+restricted development-mode apps further: a playlist's songs are only returned
+if you **created it or are a collaborator**. Following or liking someone else's
+playlist is not enough, and the API answers `403 Forbidden`.
+
+Workaround: open the playlist in Spotify, select all its songs, choose
+**Add to playlist > New playlist**, and use the link to your copy. The app
+explains this when it gets a 403.
+
+The same migration removed `GET /playlists/{id}/tracks` (the app uses its
+replacement, `/items`) and stopped returning `product` from `/me`, which is why
+Premium is confirmed by the player rather than by reading your profile.
 
 ### Snippet timing is close, not sample-exact
 
@@ -141,7 +156,7 @@ npm install       # dev-only: jsdom, for the browser-level tests
 npm test          # or:  node --test
 ```
 
-83 tests, ~7 seconds. The suite boots the real `index.html` and `main.js` in
+90 tests, ~7 seconds. The suite boots the real `index.html` and `main.js` in
 jsdom against a fake Spotify API and a fake Web Playback SDK, then plays whole
 games through the DOM.
 

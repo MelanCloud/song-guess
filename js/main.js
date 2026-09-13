@@ -213,13 +213,25 @@ el.formPlaylist.addEventListener('submit', async (e) => {
     el.options.hidden = false;
     plStatus(null);
   } catch (err) {
+    if (err instanceof api.ApiError && err.status === 403) {
+      plStatus(
+        'Spotify refused access to that playlist (403 Forbidden).\n\n' +
+        'Since February 2026, apps in development mode can only read playlists ' +
+        'you created or are a collaborator on. Following or liking a playlist ' +
+        'made by someone else is not enough.\n\n' +
+        'Workaround: in the Spotify app, open the playlist, select all of its ' +
+        'songs, choose Add to playlist > New playlist, then paste the link to ' +
+        'that new playlist here.',
+        true,
+      );
+      return;
+    }
     if (err instanceof api.ApiError && err.status === 404) {
       plStatus(
         'Spotify returned 404 for that playlist.\n\n' +
         'Editorial and algorithmic playlists owned by Spotify (Discover Weekly, ' +
         'Today’s Top Hits, Release Radar…) are blocked for apps created after ' +
-        'November 2024. Try a playlist created by a person, and make sure it is ' +
-        'public or owned by you.',
+        'November 2024. Use a playlist you created or collaborate on.',
         true,
       );
       return;
@@ -482,7 +494,10 @@ ac = createAutocomplete({
     const me = await api.getMe();
     el.userChip.textContent = me.display_name || me.id;
     setHeader();
-    if (me.product !== 'premium') {
+    // Spotify stopped returning `product` to development-mode apps in Feb 2026,
+    // so a missing field must not be read as "free". A non-Premium account is
+    // still caught by the SDK's account_error when the player starts.
+    if (me.product && me.product !== 'premium') {
       showError(new Error(
         `This account (${me.display_name || me.id}) is on Spotify ${me.product || 'free'}.\n\n` +
         'Spotify Premium is required: the Web Playback SDK will not play audio otherwise, ' +

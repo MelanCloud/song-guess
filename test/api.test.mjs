@@ -173,3 +173,56 @@ test('a missing Retry-After still falls back to a sane delay', async () => {
   await api.getMe();
   assert.ok(Date.now() - started > 1500, 'no header should back off, not hammer');
 });
+
+/* ------------------------------------------- Feb 2026 playlist migration */
+
+const entry = (i, key = 'item') => ({
+  is_local: false,
+  [key]: {
+    id: `t${i}`, uri: `spotify:track:t${i}`, name: `T${i}`, duration_ms: 200_000,
+    type: 'track', is_playable: true, artists: [{ name: 'A' }], album: { name: 'Al', images: [] },
+  },
+});
+
+test('playlist items load from /items, 50 at a time, following next', async () => {
+  reset(); login();
+  routes = [{
+    match: (u) => u.includes('/items'),
+    reply: () => {
+      const offset = Number(new URL(requests.at(-1).url).searchParams.get('offset'));
+      const count = offset === 0 ? 50 : 20;
+      return json({
+        items: Array.from({ length: count }, (_, i) => entry(offset + i)),
+        next: offset === 0 ? 'more' : null,
+      });
+    },
+  }];
+
+  const { tracks } = await api.getPlaylistTracks('p'.repeat(22));
+
+  assert.equal(tracks.length, 70);
+  assert.equal(new Set(tracks.map((t) => t.id)).size, 70, 'pages must not overlap or skip');
+  assert.deepEqual(requests.map((r) => new URL(r.url).searchParams.get('offset')), ['0', '50']);
+  for (const r of requests) {
+    assert.match(r.url, /\/playlists\/p+\/items\?/);
+    assert.doesNotMatch(r.url, /\/tracks/);
+    assert.equal(new URL(r.url).searchParams.get('limit'), '50', 'the /items endpoint caps pages at 50');
+  }
+});
+
+test('an entry still under the deprecated `track` key is read as well', async () => {
+  reset(); login();
+  routes = [{ match: (u) => u.includes('/items'), reply: () => json({ items: [entry(1, 'track')], next: null }) }];
+  const { tracks, skipped } = await api.getPlaylistTracks('p'.repeat(22));
+  assert.equal(tracks.length, 1);
+  assert.equal(skipped, 0);
+});
+
+test('playlist metadata asks for the renamed items field, not tracks', async () => {
+  reset(); login();
+  routes = [{ match: (u) => u.includes('/playlists/'), reply: () => json({ id: 'p', name: 'P' }) }];
+  await api.getPlaylist('p'.repeat(22));
+  const fields = new URL(requests[0].url).searchParams.get('fields');
+  assert.match(fields, /items\(total\)/);
+  assert.doesNotMatch(fields, /tracks/);
+});

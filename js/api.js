@@ -73,14 +73,19 @@ export function parsePlaylistId(input) {
   return m ? m[1] : null;
 }
 
+// Feb 2026: the playlist object's `tracks` field was renamed to `items`.
 export function getPlaylist(id) {
   return request(`/playlists/${id}`, {
-    query: { fields: 'id,name,description,images,owner(display_name),tracks(total)', market: 'from_token' },
+    query: { fields: 'id,name,description,images,owner(display_name),items(total)', market: 'from_token' },
   });
 }
 
-const TRACK_FIELDS =
-  'next,items(is_local,track(id,uri,name,duration_ms,is_playable,type,artists(name),album(name,images)))';
+// Feb 2026 migration: GET /playlists/{id}/tracks was removed for development-mode
+// apps and now returns 403. Its replacement, /items, caps pages at 50 and nests
+// each entry under `item`; `track` survives only as a deprecated alias.
+const PAGE_SIZE = 50;
+const ITEM_FIELDS =
+  'next,items(is_local,item(id,uri,name,duration_ms,is_playable,type,artists(name),album(name,images)))';
 
 /**
  * Fetches every playable track, following pagination.
@@ -93,10 +98,10 @@ export async function getPlaylistTracks(id, onProgress) {
   let skipped = 0;
 
   for (;;) {
-    const page = await request(`/playlists/${id}/tracks`, {
+    const page = await request(`/playlists/${id}/items`, {
       query: {
-        fields: TRACK_FIELDS,
-        limit: 100,
+        fields: ITEM_FIELDS,
+        limit: PAGE_SIZE,
         offset,
         market: 'from_token',
         additional_types: 'track',
@@ -105,7 +110,7 @@ export async function getPlaylistTracks(id, onProgress) {
 
     const items = page?.items || [];
     for (const item of items) {
-      const t = item?.track;
+      const t = item?.item ?? item?.track;
       if (!t || item.is_local || t.type !== 'track' || !t.id || t.is_playable === false) {
         skipped++;
         continue;
@@ -124,7 +129,7 @@ export async function getPlaylistTracks(id, onProgress) {
 
     onProgress?.(tracks.length);
     if (!page?.next) break;
-    offset += 100;
+    offset += PAGE_SIZE;
   }
 
   return { tracks, skipped };

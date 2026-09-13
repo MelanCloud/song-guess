@@ -31,15 +31,17 @@ const TRACKS = Array.from({ length: 24 }, (_, i) => ({
 
 // Things the loader must filter out.
 const JUNK = [
-  { is_local: true, track: { ...TRACKS[0], id: 'local1', name: 'Local File' } },
-  { is_local: false, track: { ...TRACKS[1], id: 'blocked', name: 'Blocked', is_playable: false } },
-  { is_local: false, track: { ...TRACKS[2], id: 'ep1', name: 'An Episode', type: 'episode' } },
-  { is_local: false, track: null },
+  { is_local: true, item: { ...TRACKS[0], id: 'local1', name: 'Local File' } },
+  { is_local: false, item: { ...TRACKS[1], id: 'blocked', name: 'Blocked', is_playable: false } },
+  { is_local: false, item: { ...TRACKS[2], id: 'ep1', name: 'An Episode', type: 'episode' } },
+  { is_local: false, item: null },
 ];
 
 const calls = [];
 /** Flipped on by the last test to exercise the editorial-playlist 404 path. */
 let force404 = false;
+/** Flipped on to exercise the not-owner-or-collaborator 403 path. */
+let force403 = false;
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -60,12 +62,20 @@ function fakeFetch(input, init = {}) {
   if (url.includes('/v1/me/player/play')) return Promise.resolve(new Response(null, { status: 204 }));
   if (url.endsWith('/v1/me/player')) return Promise.resolve(new Response(null, { status: 204 }));
   if (url.includes('/v1/me')) {
-    return Promise.resolve(json({ id: 'tester', display_name: 'Tester', product: 'premium' }));
+    // No `product`: Spotify stopped returning it to development-mode apps in Feb 2026.
+    return Promise.resolve(json({ id: 'tester', display_name: 'Tester' }));
   }
+  if (force403 && url.includes('/items')) {
+    return Promise.resolve(json({ error: { status: 403, message: 'Forbidden' } }, 403));
+  }
+  // The endpoint removed in Feb 2026, so a regression back to it fails loudly.
   if (url.includes('/tracks')) {
+    return Promise.resolve(json({ error: { status: 403, message: 'Forbidden' } }, 403));
+  }
+  if (url.includes('/items')) {
     return Promise.resolve(json({
       next: null,
-      items: [...JUNK, ...TRACKS.map((t) => ({ is_local: false, track: t }))],
+      items: [...JUNK, ...TRACKS.map((t) => ({ is_local: false, item: t }))],
     }));
   }
   if (url.includes('/v1/playlists/')) {
@@ -218,6 +228,9 @@ test('loads a playlist and filters out unplayable entries', async () => {
   assert.match($('pl-sub').textContent, /by Someone/);
   assert.match($('pl-sub').textContent, /4 unplayable skipped/);
   assert.equal($('opt-rounds').value, '10');
+  assert.ok(calls.some((c) => /^GET \/playlists\/p+\/items\?.*limit=50/.test(c)),
+    'must load from /items, 50 per page');
+  assert.ok(!calls.some((c) => c.includes('/tracks')), 'the removed /tracks endpoint must not be called');
 });
 
 test('starting a game boots the player and cues the first round', async () => {
@@ -464,8 +477,23 @@ test('a 404 playlist explains the editorial-playlist restriction', async () => {
   const msg = $('playlist-status').textContent;
   assert.match(msg, /404/);
   assert.match(msg, /Discover Weekly/);
-  assert.match(msg, /created by a person/);
+  assert.match(msg, /you created or collaborate on/);
   assert.equal($('game-options').hidden, true, 'options must be hidden after a failed load');
   assert.deepEqual(errors, [], 'the 404 must not raise an uncaught error');
   force404 = false;
+});
+
+test('a 403 playlist explains the owner-or-collaborator rule and the workaround', async () => {
+  force403 = true;
+  $('playlist-input').value = `spotify:playlist:${'r'.repeat(22)}`;
+  fire($('form-playlist'), 'submit');
+  await until(() => /403 Forbidden/.test($('playlist-status').textContent), 'the 403 message');
+
+  const msg = $('playlist-status').textContent;
+  assert.match(msg, /you created or are a collaborator on/);
+  assert.match(msg, /New playlist/);
+  assert.equal($('playlist-status').classList.contains('is-error'), true);
+  assert.equal($('game-options').hidden, true);
+  assert.deepEqual(errors, []);
+  force403 = false;
 });

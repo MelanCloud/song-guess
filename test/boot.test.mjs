@@ -99,7 +99,8 @@ test('returning from Spotify exchanges the code and starts the app', async () =>
       if (url.includes('accounts.spotify.com')) {
         return json({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 });
       }
-      return json({ id: 'u', display_name: 'Player One', product: 'premium' });
+      // No `product`: Spotify stopped returning it to development-mode apps.
+      return json({ id: 'u', display_name: 'Player One' });
     },
   });
 
@@ -159,4 +160,16 @@ test('a redirect-URI mismatch explains how to fix the dashboard', async () => {
   assert.match(text, /Invalid redirect URI/);
   assert.match(text, /http:\/\/127\.0\.0\.1:8080\/callback/,
     'the error should tell the user exactly what to register');
+});
+
+test('a profile without the product field is not mistaken for a free account', async () => {
+  // Since Feb 2026 /me omits `product` for development-mode apps, so its absence
+  // must not block a Premium user; the SDK rejects free accounts on its own.
+  const { visible, $ } = await boot({
+    clientId: 'cid',
+    tokens: { access_token: 'a', refresh_token: 'r', expires_at: Date.now() + 3_600_000 },
+    me: { id: 'u', display_name: 'Premium Person' },
+  });
+  assert.equal(visible(), 'screen-playlist');
+  assert.equal($('user-chip').textContent, 'Premium Person');
 });
