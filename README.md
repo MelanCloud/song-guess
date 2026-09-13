@@ -137,15 +137,26 @@ be routed through Web Audio.
 ## Tests
 
 ```sh
+npm install       # dev-only: jsdom, for the browser-level tests
 npm test          # or:  node --test
 ```
 
-33 tests covering the ladder, scoring, the round state machine, anchor
-selection, text normalisation and the autocomplete ranking, plus a static check
-that every element id `main.js` binds to actually exists in `index.html`.
+83 tests, ~7 seconds. The suite boots the real `index.html` and `main.js` in
+jsdom against a fake Spotify API and a fake Web Playback SDK, then plays whole
+games through the DOM.
 
-There is no test for live playback — that needs a real Premium session and a
-browser.
+| File | Covers |
+|---|---|
+| `logic.test.mjs` | ladder, scoring, round state machine, anchors, shuffle, text matching, autocomplete ranking |
+| `api.test.mjs` | playlist-id parsing, token refresh, 429 retry, error mapping |
+| `player.test.mjs` | SDK error reporting, and whether snippet timing converges on its target |
+| `boot.test.mjs` | the three start-up states, plus the full OAuth redirect including state-mismatch rejection |
+| `integration.test.mjs` | a full game through the DOM: load, cue, play, autocomplete, guess, reveal, summary |
+| `dom.test.mjs` | every element id `main.js` binds to exists in the markup |
+
+**Not covered:** real audio. The timing calibration is verified against a
+simulated player with injected latency, which proves the control loop converges,
+but only a real Premium session shows how close it lands in practice.
 
 ## Project layout
 
@@ -163,6 +174,10 @@ js/
   autocomplete.js   playlist-scoped typeahead
   text.js           shared normalisation for search and answer matching
 test/
-  logic.test.mjs    game rules, text matching, autocomplete ranking
-  dom.test.mjs      markup/script contract
+  logic.test.mjs        game rules, text matching, autocomplete ranking
+  api.test.mjs          request layer, token refresh, error mapping
+  player.test.mjs       SDK errors and snippet timing convergence
+  boot.test.mjs         start-up states and the OAuth redirect
+  integration.test.mjs  a full game driven through the DOM
+  dom.test.mjs          markup/script contract
 ```

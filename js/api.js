@@ -28,8 +28,10 @@ async function request(path, { method = 'GET', body, query, retry = true } = {})
   if (res.status === 204) return null;
 
   if (res.status === 429 && retry) {
-    const wait = (Number(res.headers.get('Retry-After')) || 2) * 1000;
-    await sleep(wait + 250);
+    // Retry-After: 0 is valid and means "go now", so a plain `|| 2` would be wrong.
+    const header = res.headers.get('Retry-After');
+    const secs = header === null ? 2 : Number(header);
+    await sleep((Number.isFinite(secs) ? secs : 2) * 1000 + 250);
     return request(path, { method, body, query, retry: false });
   }
 

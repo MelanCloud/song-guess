@@ -182,10 +182,16 @@ el.formPlaylist.addEventListener('submit', async (e) => {
   plStatus('Loading playlist…');
 
   try {
-    const [meta, { tracks, skipped }] = await Promise.all([
+    // allSettled, not all: if both calls fail the second rejection would
+    // otherwise go unhandled and surface as a console error.
+    const [metaRes, tracksRes] = await Promise.allSettled([
       api.getPlaylist(id),
       api.getPlaylistTracks(id, (n) => plStatus(`Loaded ${n} tracks…`)),
     ]);
+    if (metaRes.status === 'rejected') throw metaRes.reason;
+    if (tracksRes.status === 'rejected') throw tracksRes.reason;
+    const meta = metaRes.value;
+    const { tracks, skipped } = tracksRes.value;
 
     if (tracks.length < 2) {
       plStatus('That playlist has fewer than 2 playable tracks.', true);
@@ -311,8 +317,8 @@ el.play.addEventListener('click', async () => {
 });
 
 el.more.addEventListener('click', () => {
-  const round = state.g.round;
-  if (!game.extend(round)) return;
+  const round = state.g?.round;
+  if (!round || round.over || !game.extend(round)) return;
   renderRound();
   el.snippetHint.textContent = `Unlocked ${fmt(game.currentDuration(round))} — press play`;
 });

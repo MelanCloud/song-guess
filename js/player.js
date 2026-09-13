@@ -51,21 +51,28 @@ export async function initPlayer({ onFatal } = {}) {
     volume,
   });
 
+  let readyTimer;
   const ready = new Promise((resolve, reject) => {
-    player.addListener('ready', ({ device_id }) => {
+    readyTimer = setTimeout(
+      () => reject(new Error('Timed out waiting for the Spotify player to start.')),
+      20_000,
+    );
+    // Settle once and drop the timer, so a resolved init leaves nothing pending.
+    const settle = (fn) => (arg) => { clearTimeout(readyTimer); fn(arg); };
+
+    player.addListener('ready', settle(({ device_id }) => {
       deviceId = device_id;
       resolve(device_id);
-    });
-    player.addListener('initialization_error', ({ message }) =>
-      reject(new Error(`Player failed to start: ${message}`)));
-    player.addListener('authentication_error', ({ message }) =>
-      reject(new Error(`Spotify rejected the session: ${message}`)));
-    player.addListener('account_error', () =>
+    }));
+    player.addListener('initialization_error', settle(({ message }) =>
+      reject(new Error(`Player failed to start: ${message}`))));
+    player.addListener('authentication_error', settle(({ message }) =>
+      reject(new Error(`Spotify rejected the session: ${message}`))));
+    player.addListener('account_error', settle(() =>
       reject(new Error(
         'This Spotify account cannot use the Web Playback SDK. ' +
         'Spotify Premium is required to play full tracks in the browser.'
-      )));
-    setTimeout(() => reject(new Error('Timed out waiting for the Spotify player to start.')), 20_000);
+      ))));
   });
 
   player.addListener('not_ready', () => { deviceId = null; });
@@ -73,12 +80,20 @@ export async function initPlayer({ onFatal } = {}) {
     onFatal?.(new Error(`Playback error: ${message}`));
   });
 
-  const connected = await player.connect();
-  if (!connected) throw new Error('Could not connect to Spotify playback.');
+  // If we bail out before awaiting `ready`, nothing would be listening when the
+  // timeout above fires, so mark it handled up front.
+  ready.catch(() => {});
 
-  const id = await ready;
-  await api.transferPlayback(id, false).catch(() => {});
-  return id;
+  try {
+    const connected = await player.connect();
+    if (!connected) throw new Error('Could not connect to Spotify playback.');
+
+    const id = await ready;
+    await api.transferPlayback(id, false).catch(() => {});
+    return id;
+  } finally {
+    clearTimeout(readyTimer);
+  }
 }
 
 /** Satisfies browser autoplay policy — must run inside a user gesture. */
