@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Song Guess</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-dot"></span> Song Guess</div>
+  <div class="topbar-right">
+    <span id="user-chip" class="chip" hidden></span>
+    <button id="btn-logout" class="btn btn-ghost btn-sm" hidden>Log out</button>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ---------------------------------------------------------- setup -->
+  <section id="screen-setup" class="screen card" hidden>
+    <h1>One-time setup</h1>
+    <p class="muted">
+      This runs entirely on your machine, so it needs your own Spotify app credentials.
+      Nothing is sent anywhere except to Spotify.
+    </p>
+    <ol class="steps">
+      <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and click <strong>Create app</strong>.</li>
+      <li>Give it any name. Under <strong>APIs used</strong>, tick <strong>Web API</strong> and <strong>Web Playback SDK</strong>.</li>
+      <li>Set the <strong>Redirect URI</strong> to exactly this, then click <em>Add</em>:
+        <div class="copyrow">
+          <code id="redirect-uri"></code>
+          <button id="btn-copy-redirect" class="btn btn-ghost btn-sm" type="button">Copy</button>
+        </div>
+      </li>
+      <li>Save, then copy the app's <strong>Client ID</strong> and paste it here.</li>
+    </ol>
+    <form id="form-client" class="stack">
+      <label class="label" for="client-id">Client ID</label>
+      <input id="client-id" class="input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="e.g. 4f2a1c9b8d3e4f5a6b7c8d9e0f1a2b3c" required>
+      <button class="btn btn-primary" type="submit">Save and continue</button>
+    </form>
+    <p class="note">
+      Spotify <strong>Premium is required</strong> — the Web Playback SDK will not play
+      audio on a free account. Apps start in development mode, so anyone else who wants to
+      play must be added under <em>Settings &rsaquo; User Management</em> in your dashboard (25 max).
+    </p>
+  </section>
+
+  <!-- -------------------------------------------------------- connect -->
+  <section id="screen-connect" class="screen card" hidden>
+    <h1>Connect Spotify</h1>
+    <p class="muted">You'll be sent to Spotify to authorise, then straight back here.</p>
+    <button id="btn-login" class="btn btn-primary btn-lg">Connect Spotify</button>
+    <button id="btn-change-client" class="btn btn-ghost btn-sm">Use a different Client ID</button>
+  </section>
+
+  <!-- ------------------------------------------------------- playlist -->
+  <section id="screen-playlist" class="screen card" hidden>
+    <h1>Pick a playlist</h1>
+    <form id="form-playlist" class="stack">
+      <label class="label" for="playlist-input">Spotify playlist link, URI or ID</label>
+      <input id="playlist-input" class="input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="https://open.spotify.com/playlist/..." required>
+      <button id="btn-load" class="btn btn-primary" type="submit">Load playlist</button>
+    </form>
+    <p class="note">
+      Spotify's own editorial and algorithmic playlists (Discover Weekly, Today's Top Hits…)
+      are blocked by the API for new apps. Use a playlist made by a person.
+    </p>
+    <div id="playlist-status" class="status" hidden></div>
+
+    <div id="playlist-preview" class="preview" hidden>
+      <img id="pl-art" class="pl-art" alt="">
+      <div class="pl-meta">
+        <h2 id="pl-name"></h2>
+        <p id="pl-sub" class="muted"></p>
+      </div>
+    </div>
+
+    <fieldset id="game-options" class="options" hidden>
+      <legend>Game options</legend>
+
+      <label class="field">
+        <span>Rounds</span>
+        <input id="opt-rounds" class="input input-sm" type="number" min="1" max="100" value="10">
+      </label>
+
+      <label class="field">
+        <span>Snippet starts</span>
+        <select id="opt-anchor" class="input input-sm">
+          <option value="random" selected>Somewhere in the song (recommended)</option>
+          <option value="start">At the very beginning</option>
+        </select>
+      </label>
+
+      <label class="check">
+        <input id="opt-advance" type="checkbox" checked>
+        <span>A wrong guess also unlocks the next length</span>
+      </label>
+
+      <button id="btn-start" class="btn btn-primary" type="button">Start game</button>
+    </fieldset>
+  </section>
+
+  <!-- ----------------------------------------------------------- game -->
+  <section id="screen-game" class="screen" hidden>
+    <div class="game-head">
+      <span id="round-label" class="chip"></span>
+      <span id="score-label" class="chip chip-quiet"></span>
+    </div>
+
+    <ol id="ladder" class="ladder" aria-label="Snippet length"></ol>
+
+    <div class="player-card">
+      <button id="btn-play" class="play-btn" type="button" aria-label="Play snippet">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <div class="player-meta">
+        <div id="snippet-len" class="snippet-len">0.1s</div>
+        <div id="snippet-hint" class="muted small">Press play to hear the snippet</div>
+      </div>
+    </div>
+
+    <form id="form-guess" class="guess" autocomplete="off">
+      <div class="ac-wrap">
+        <input id="guess-input" class="input" type="text" role="combobox"
+               aria-expanded="false" aria-autocomplete="list" aria-controls="guess-list"
+               placeholder="Type a song or artist from this playlist…" spellcheck="false">
+        <ul id="guess-list" class="ac-list" role="listbox" aria-label="Matching songs" hidden></ul>
+      </div>
+      <div class="guess-actions">
+        <button id="btn-guess" class="btn btn-primary" type="submit">Guess</button>
+        <button id="btn-more" class="btn btn-secondary" type="button">More time</button>
+        <button id="btn-giveup" class="btn btn-ghost" type="button">Give up</button>
+      </div>
+    </form>
+
+    <ul id="guess-log" class="guess-log"></ul>
+
+    <div id="reveal" class="reveal" hidden>
+      <img id="rv-art" class="rv-art" alt="">
+      <div class="rv-meta">
+        <div id="rv-verdict" class="rv-verdict"></div>
+        <h2 id="rv-title"></h2>
+        <p id="rv-artist" class="muted"></p>
+        <a id="rv-link" class="link" target="_blank" rel="noopener">Open in Spotify</a>
+      </div>
+      <button id="btn-next" class="btn btn-primary">Next song</button>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- summary -->
+  <section id="screen-summary" class="screen card" hidden>
+    <h1>Game over</h1>
+    <p id="sum-score" class="sum-score"></p>
+    <ol id="sum-list" class="sum-list"></ol>
+    <div class="row">
+      <button id="btn-again" class="btn btn-primary">Play again</button>
+      <button id="btn-newplaylist" class="btn btn-ghost">Different playlist</button>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- error -->
+  <section id="screen-error" class="screen card" hidden>
+    <h1>Something went wrong</h1>
+    <pre id="error-text" class="error-text"></pre>
+    <div class="row">
+      <button id="btn-retry" class="btn btn-primary">Back</button>
+      <button id="btn-reset" class="btn btn-ghost">Reset everything</button>
+    </div>
+  </section>
+
+</main>
+
+<div id="loading" class="loading" hidden><div class="spinner"></div><span id="loading-text"></span></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

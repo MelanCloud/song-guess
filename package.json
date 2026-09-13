@@ -1,0 +1,14 @@
+{
+  "name": "song-guess",
+  "version": "1.0.0",
+  "description": "Locally hosted guess-the-song game over any Spotify playlist",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
